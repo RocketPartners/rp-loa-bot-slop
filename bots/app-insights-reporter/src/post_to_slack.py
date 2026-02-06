@@ -207,6 +207,28 @@ def post_to_slack(report, insights_data_path='/app/insights_data.json', business
         # Parse the report
         status_emoji, metrics, business_metrics, issues, action = parse_report(report)
 
+        # Debug output
+        print(f"📊 Parsed report:")
+        print(f"  Status: {status_emoji}")
+        print(f"  Metrics: {metrics[:100] if metrics else 'NONE'}")
+        print(f"  Business Metrics: {business_metrics[:100] if business_metrics else 'NONE'}")
+        print(f"  Issues found: {len(issues)}")
+        print(f"  Action: {action[:100] if action else 'NONE'}")
+
+        # Validate we got something
+        if not metrics and not business_metrics and not issues:
+            print("⚠️  Parser found no structured data. Check Claude's output format.")
+            print("📝 Raw report:")
+            print(report[:500])
+            print("\n⚠️  Posting as plain text fallback...")
+
+            # Fallback: post as simple formatted text
+            client.chat_postMessage(
+                channel=SLACK_CHANNEL,
+                text=f"⚠️ LoA Application Insights Report\n\n{report}"
+            )
+            return 1
+
         # Load insights data for timeline chart and date range
         timeline_data = []
         app_insights_time = None

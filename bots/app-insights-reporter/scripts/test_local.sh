@@ -70,41 +70,10 @@ else
   echo '{"success": false, "data": {}}' > "$BOT_DIR/business_metrics.json"
 fi
 
-# Step 2: Analyze with Claude Code
+# Step 2: Format report from JSON data
 echo ""
-echo "🤖 Step 2: Analyzing data with Claude Code..."
-ANALYSIS=$(echo "Analyze Application Insights data for LoA Player and create a daily summary report.
-
-Data: \$(cat $BOT_DIR/insights_data.json)
-Business Metrics: \$(cat $BOT_DIR/business_metrics.json)
-
-Contains summary metrics, 50 recent exceptions, and top 20 exception groups.
-
-Create report with EXACTLY this format:
-
-🔴 LoA Player Health Status - [Date]
-
-Metrics: [X] exceptions | [Y] requests | [Z] dependencies ([N] failed) | P95: [Ms]ms
-
-Business Metrics (if available): [N] offers | [M] player heartbeats | [K] upsells
-
-Top 5 Problems:
-1. **[count]×** [ProblemId] - [brief description]
-2. **[count]×** [ProblemId] - [brief description]
-3. **[count]×** [ProblemId] - [brief description]
-4. **[count]×** [ProblemId] - [brief description]
-5. **[count]×** [ProblemId] - [brief description]
-
-🚨 Action Required: [One sentence with specific action]
-
-IMPORTANT:
-- Use EXACTLY format above
-- Include '×' symbol after counts
-- Use '**' for bold
-- Show all 5 issues
-- Be specific about error types
-
-Output ONLY the report." | claude -p --dangerously-skip-permissions)
+echo "📊 Step 2: Formatting report from data..."
+ANALYSIS=$(python3 "$BOT_DIR/src/format_report.py" "$BOT_DIR/insights_data.json" "$BOT_DIR/business_metrics.json")
 
 if [ $? -ne 0 ]; then
   echo "❌ Claude Code analysis failed"
