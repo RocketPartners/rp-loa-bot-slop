@@ -72,7 +72,7 @@ def fetch_redshift_metrics(interval_sql):
             UNION ALL
 
             SELECT playercode
-            FROM warehouse.public.offer_2025_q4
+            FROM warehouse.public.offer_2026_q1
             WHERE createdat >= GETDATE() - {interval_sql}
               AND cashierkey LIKE '%CashierName%'
         ) AS combined;
@@ -94,7 +94,7 @@ def fetch_redshift_metrics(interval_sql):
             UNION ALL
 
             SELECT playercode
-            FROM warehouse.public.offer_2025_q4
+            FROM warehouse.public.offer_2026_q1
             WHERE createdat >= GETDATE() - {interval_sql}
               AND cashierkey LIKE '%CashierName%'
               AND liftadded = true

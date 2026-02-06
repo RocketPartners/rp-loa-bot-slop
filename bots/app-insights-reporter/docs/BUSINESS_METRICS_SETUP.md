@@ -2,7 +2,7 @@
 
 ## Current Status
 
-✅ **Offers (Redshift)** - Working! Fetches from `firehose_offer9` and `offer_2025_q4`
+✅ **Offers (Redshift)** - Working! Fetches from `firehose_offer9` and `offer_2026_q1`
 ⏳ **Player Heartbeats (MySQL)** - Needs configuration
 ⏳ **Upsells (Redshift)** - Needs query
 

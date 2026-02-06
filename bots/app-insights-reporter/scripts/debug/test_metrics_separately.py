@@ -40,7 +40,7 @@ def test_redshift_offers():
                 WHERE createdat >= GETDATE() - INTERVAL '1 day'
                   AND cashierkey LIKE '%CashierName%'
                 UNION ALL
-                SELECT playercode FROM warehouse.public.offer_2025_q4
+                SELECT playercode FROM warehouse.public.offer_2026_q1
                 WHERE createdat >= GETDATE() - INTERVAL '1 day'
                   AND cashierkey LIKE '%CashierName%'
             ) AS combined;
@@ -79,7 +79,7 @@ def test_redshift_upsells():
                   AND cashierkey LIKE '%CashierName%'
                   AND liftadded = true
                 UNION ALL
-                SELECT playercode FROM warehouse.public.offer_2025_q4
+                SELECT playercode FROM warehouse.public.offer_2026_q1
                 WHERE createdat >= GETDATE() - INTERVAL '1 day'
                   AND cashierkey LIKE '%CashierName%'
                   AND liftadded = true
