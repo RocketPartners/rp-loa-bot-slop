@@ -5,6 +5,7 @@ More reliable than asking Claude to format
 """
 import json
 import sys
+import re
 from datetime import datetime
 
 def format_report(insights_path='insights_data.json', business_path='business_metrics.json'):
@@ -68,27 +69,50 @@ Top 5 Problems:
         for i, issue in enumerate(top_issues, 1):
             count = issue.get('Count', 0)
             error_type = issue.get('type', 'Unknown')
-            operation = issue.get('operation_Name', 'Unknown')
+            operation = issue.get('operation_Name', '')
             message = issue.get('SampleMessage', '')
+            problem_id = issue.get('problemId', '')
 
-            # Shorten message
-            if len(message) > 80:
-                message = message[:77] + '...'
+            # Extract operation from problemId since operation_Name is always empty
+            # problemId format: "TypeError at BasketAdQueue.handleLineItemEvents"
+            if not operation and problem_id:
+                match = re.search(r'\s+at\s+(.+)$', problem_id)
+                if match:
+                    operation = match.group(1)
 
-            # Extract just the error description
-            if ' - ' in message:
-                message = message.split(' - ', 1)[1]
-            elif ': ' in message:
-                message = message.split(': ', 1)[1]
+            # Clean up message
+            # Format: "TypeError: 2026-02-06T13:47:48.773Z Cannot read properties..."
+            # Remove error type prefix if present
+            message = re.sub(r'^' + re.escape(error_type) + r':\s*', '', message)
 
-            report += f"{i}. **{count:,}×** {error_type} at {operation} - {message}\n"
+            # Remove ISO timestamp
+            message = re.sub(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\s*', '', message)
+
+            # Shorten message if extremely long (Slack code blocks can handle more text)
+            if len(message) > 120:
+                message = message[:117] + '...'
+
+            # Build description
+            if operation:
+                description = f"{error_type} at {operation} - {message}"
+            else:
+                description = f"{error_type} - {message}"
+
+            report += f"{i}. **{count:,}×** {description}\n"
 
         # Add action (simple heuristic based on top issue)
         if top_issues:
             top_issue = top_issues[0]
-            top_operation = top_issue.get('operation_Name', 'Unknown')
+            top_problem_id = top_issue.get('problemId', '')
             top_count = top_issue.get('Count', 0)
             percentage = int((top_count / total_exceptions * 100)) if total_exceptions > 0 else 0
+
+            # Extract operation from problemId
+            top_operation = 'the top issue'
+            if top_problem_id:
+                match = re.search(r'\s+at\s+(.+)$', top_problem_id)
+                if match:
+                    top_operation = match.group(1)
 
             report += f"\n🚨 Action Required: Investigate {top_operation} null-safety - accounts for {percentage}% of exceptions\n"
         else:

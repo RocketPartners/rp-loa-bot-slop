@@ -26,10 +26,15 @@ def generate_chart_url(timeline_data):
     if not timeline_data:
         return None
 
+    # Sort by timestamp and get only last 24 data points (hours)
+    # This prevents URL from being too long when we have multi-day data
+    sorted_data = sorted(timeline_data, key=lambda x: x.get('timestamp', ''))
+    recent_data = sorted_data[-24:] if len(sorted_data) > 24 else sorted_data
+
     # Extract hours and counts
     labels = []
     data = []
-    for entry in timeline_data:
+    for entry in recent_data:
         # Parse timestamp to hour
         timestamp = entry.get('timestamp', '')
         count = entry.get('Count', 0)
@@ -46,7 +51,7 @@ def generate_chart_url(timeline_data):
     if not data:
         return None
 
-    # Build Chart.js config
+    # Build Chart.js config matching the style from the image
     chart_config = {
         "type": "bar",
         "data": {
@@ -54,34 +59,47 @@ def generate_chart_url(timeline_data):
             "datasets": [{
                 "label": "Exceptions",
                 "data": data,
-                "backgroundColor": "rgba(220, 38, 38, 0.8)",
-                "borderColor": "rgb(220, 38, 38)",
+                "backgroundColor": "rgba(220,38,38,0.9)",
+                "borderColor": "rgba(220,38,38,1)",
                 "borderWidth": 1
             }]
         },
         "options": {
+            "responsive": True,
+            "maintainAspectRatio": True,
+            "legend": {"display": False},
             "title": {
                 "display": True,
                 "text": "Exception Timeline - Last 24 Hours",
-                "fontSize": 16
-            },
-            "legend": {
-                "display": False
+                "fontSize": 18,
+                "fontColor": "#e5e7eb"
             },
             "scales": {
                 "yAxes": [{
                     "ticks": {
-                        "beginAtZero": True
+                        "beginAtZero": True,
+                        "fontColor": "#9ca3af"
                     },
                     "scaleLabel": {
                         "display": True,
-                        "labelString": "Count"
+                        "labelString": "Count",
+                        "fontColor": "#9ca3af"
+                    },
+                    "gridLines": {
+                        "color": "rgba(156,163,175,0.2)"
                     }
                 }],
                 "xAxes": [{
+                    "ticks": {
+                        "fontColor": "#9ca3af"
+                    },
                     "scaleLabel": {
                         "display": True,
-                        "labelString": "Time (UTC)"
+                        "labelString": "Time (UTC)",
+                        "fontColor": "#9ca3af"
+                    },
+                    "gridLines": {
+                        "color": "rgba(156,163,175,0.2)"
                     }
                 }]
             }
@@ -90,18 +108,27 @@ def generate_chart_url(timeline_data):
 
     # URL encode the config
     import urllib.parse
-    config_json = json.dumps(chart_config)
+    config_json = json.dumps(chart_config, separators=(',', ':'))  # Compact JSON
     encoded = urllib.parse.quote(config_json)
 
-    return f"https://quickchart.io/chart?c={encoded}&width=800&height=300"
+    # Use dark background to match Slack's dark mode
+    chart_url = f"https://quickchart.io/chart?c={encoded}&w=800&h=400&bkg=%23111827&devicePixelRatio=2"
+
+    # Check URL length (URLs over 2000 chars often fail)
+    if len(chart_url) > 2000:
+        print(f"⚠️  Chart URL too long ({len(chart_url)} chars), using ASCII fallback", file=sys.stderr)
+        return None
+
+    return chart_url
 
 def create_ascii_chart(timeline_data):
     """Create ASCII bar chart for exception timeline"""
     if not timeline_data or len(timeline_data) == 0:
         return None
 
-    # Get last 12 hours for display
-    recent_data = timeline_data[-12:] if len(timeline_data) > 12 else timeline_data
+    # Sort and get last 12-24 hours for display
+    sorted_data = sorted(timeline_data, key=lambda x: x.get('timestamp', ''))
+    recent_data = sorted_data[-12:] if len(sorted_data) > 12 else sorted_data
 
     max_count = max([d.get('Count', 0) for d in recent_data], default=1)
 
@@ -113,10 +140,14 @@ def create_ascii_chart(timeline_data):
 
         if timestamp:
             try:
-                hour = timestamp.split('T')[1][:5]
+                # Show time in format "Thu 08:00" or just "08:00"
+                from datetime import datetime
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                time_label = dt.strftime('%H:%M')
+
                 bar_length = int((count / max_count) * 20) if max_count > 0 else 0
                 bar = "█" * bar_length
-                chart_lines.append(f"{hour} {bar} {count}")
+                chart_lines.append(f"{time_label} {bar} {count:>5}")
             except:
                 continue
 
@@ -437,9 +468,10 @@ def post_to_slack(report, insights_data_path='/app/insights_data.json', business
                 "type": "divider"
             })
 
-            # Try to add QuickChart image
+            # Try to add QuickChart image first, fallback to ASCII
             chart_url = generate_chart_url(timeline_data)
             if chart_url:
+                print(f"📊 Chart URL generated: {chart_url[:100]}...", file=sys.stderr)
                 blocks.append({
                     "type": "section",
                     "text": {
@@ -450,10 +482,11 @@ def post_to_slack(report, insights_data_path='/app/insights_data.json', business
                 blocks.append({
                     "type": "image",
                     "image_url": chart_url,
-                    "alt_text": "Exception timeline chart"
+                    "alt_text": "Exception timeline showing hourly exception counts"
                 })
             else:
-                # Fallback to ASCII chart
+                # Fallback to ASCII chart if URL generation fails
+                print("⚠️  Chart URL generation failed, using ASCII fallback", file=sys.stderr)
                 ascii_chart = create_ascii_chart(timeline_data)
                 if ascii_chart:
                     blocks.append({
