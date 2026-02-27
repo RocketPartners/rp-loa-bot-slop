@@ -40,8 +40,13 @@ MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE')
 MYSQL_USER = os.environ.get('MYSQL_USER')
 MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD')
 
-def fetch_redshift_metrics(interval_sql):
-    """Fetch offers and upsells from Redshift"""
+# Redshift expression to convert createdat (char with TZ offset) to ET date
+# createdat is char(29) with ISO 8601 + offset, e.g. '2026-02-19T23:57:05.741-07:00'
+ET_DATE = "DATE(CONVERT_TIMEZONE('UTC', 'America/New_York', CAST(CAST(createdat AS TIMESTAMPTZ) AS TIMESTAMP)))"
+
+
+def fetch_redshift_metrics(buffer_start, buffer_end, start_date, end_date):
+    """Fetch offers and upsells from Redshift for ET calendar day(s)."""
     offers_count = None
     upsells_count = None
 
@@ -60,44 +65,52 @@ def fetch_redshift_metrics(interval_sql):
 
         cursor = conn.cursor()
 
-        # Query for Offers (dynamic interval based on day of week)
+        # Query for Offers (ET calendar day boundaries)
         offers_query = f"""
-        SELECT COUNT(*) AS offers_last_24h
+        SELECT COUNT(*) AS offers
         FROM (
             SELECT playercode
             FROM warehouse.public.firehose_offer9
-            WHERE createdat >= GETDATE() - {interval_sql}
+            WHERE createdat >= '{buffer_start}'
+              AND createdat < '{buffer_end}'
               AND cashierkey LIKE '%CashierName%'
+              AND {ET_DATE} >= '{start_date}' AND {ET_DATE} < '{end_date}'
 
             UNION ALL
 
             SELECT playercode
             FROM warehouse.public.offer_2026_q1
-            WHERE createdat >= GETDATE() - {interval_sql}
+            WHERE createdat >= '{buffer_start}'
+              AND createdat < '{buffer_end}'
               AND cashierkey LIKE '%CashierName%'
+              AND {ET_DATE} >= '{start_date}' AND {ET_DATE} < '{end_date}'
         ) AS combined;
         """
 
         cursor.execute(offers_query)
         offers_count = cursor.fetchone()[0]
 
-        # Query for Upsells (dynamic interval) - offers where liftadded = true
+        # Query for Upsells - offers where liftadded = true
         upsells_query = f"""
-        SELECT COUNT(*) AS upsell_last_24h
+        SELECT COUNT(*) AS upsells
         FROM (
             SELECT playercode
             FROM warehouse.public.firehose_offer9
-            WHERE createdat >= GETDATE() - {interval_sql}
+            WHERE createdat >= '{buffer_start}'
+              AND createdat < '{buffer_end}'
               AND cashierkey LIKE '%CashierName%'
               AND liftadded = true
+              AND {ET_DATE} >= '{start_date}' AND {ET_DATE} < '{end_date}'
 
             UNION ALL
 
             SELECT playercode
             FROM warehouse.public.offer_2026_q1
-            WHERE createdat >= GETDATE() - {interval_sql}
+            WHERE createdat >= '{buffer_start}'
+              AND createdat < '{buffer_end}'
               AND cashierkey LIKE '%CashierName%'
               AND liftadded = true
+              AND {ET_DATE} >= '{start_date}' AND {ET_DATE} < '{end_date}'
         ) AS combined;
         """
 
@@ -168,12 +181,13 @@ def fetch_business_metrics():
         # Get date range based on day of week
         date_info = get_date_range()
 
-        # Fetch from Redshift (offers and upsells)
+        # Fetch from Redshift (offers and upsells) using ET calendar day boundaries
         offers_count, upsells_count, redshift_time = fetch_redshift_metrics(
-            date_info['interval_sql_redshift']
+            date_info['buffer_start'], date_info['buffer_end'],
+            date_info['start_date'], date_info['end_date']
         )
 
-        # Fetch from MySQL (player heartbeats)
+        # Fetch from MySQL (player heartbeats) — rolling window since table stores current state only
         heartbeats_count, mysql_time = fetch_mysql_heartbeats(
             date_info['interval_sql_mysql']
         )
