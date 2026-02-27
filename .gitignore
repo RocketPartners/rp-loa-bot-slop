@@ -3,6 +3,9 @@
 *.env
 !.env.example
 
+# VPN config (contains private keys)
+vpn.ovpn
+
 # Python
 __pycache__/
 *.py[cod]
