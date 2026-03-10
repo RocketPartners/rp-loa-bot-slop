@@ -7,8 +7,21 @@ import os
 import json
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 from get_date_range import get_date_range
+
+ET = ZoneInfo('America/New_York')
+
+
+def quarter_for_month(month):
+    """Return quarter number (1-4) for a given month (1-12)."""
+    return (month - 1) // 3 + 1
+
+
+def offer_table_name(year, quarter):
+    """Return the quarterly offer table name, e.g. offer_2026_q1."""
+    return f"warehouse.public.offer_{year}_q{quarter}"
 
 # Try to import database libraries
 try:
@@ -45,7 +58,7 @@ MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD')
 ET_DATE = "DATE(CONVERT_TIMEZONE('UTC', 'America/New_York', CAST(CAST(createdat AS TIMESTAMPTZ) AS TIMESTAMP)))"
 
 
-def fetch_redshift_metrics(buffer_start, buffer_end, start_date, end_date):
+def fetch_redshift_metrics(buffer_start, buffer_end, start_date, end_date, quarterly_table):
     """Fetch offers and upsells from Redshift for ET calendar day(s)."""
     offers_count = None
     upsells_count = None
@@ -79,7 +92,7 @@ def fetch_redshift_metrics(buffer_start, buffer_end, start_date, end_date):
             UNION ALL
 
             SELECT playercode
-            FROM warehouse.public.offer_2026_q1
+            FROM {quarterly_table}
             WHERE createdat >= '{buffer_start}'
               AND createdat < '{buffer_end}'
               AND cashierkey LIKE '%CashierName%'
@@ -105,7 +118,7 @@ def fetch_redshift_metrics(buffer_start, buffer_end, start_date, end_date):
             UNION ALL
 
             SELECT playercode
-            FROM warehouse.public.offer_2026_q1
+            FROM {quarterly_table}
             WHERE createdat >= '{buffer_start}'
               AND createdat < '{buffer_end}'
               AND cashierkey LIKE '%CashierName%'
@@ -181,10 +194,17 @@ def fetch_business_metrics():
         # Get date range based on day of week
         date_info = get_date_range()
 
+        # Determine the quarterly table from the report date (ET)
+        report_date = date.fromisoformat(date_info['report_date'])
+        quarter = quarter_for_month(report_date.month)
+        quarterly_table = offer_table_name(report_date.year, quarter)
+        print(f"Querying quarterly table: {quarterly_table} (Q{quarter} {report_date.year})", file=sys.stderr)
+
         # Fetch from Redshift (offers and upsells) using ET calendar day boundaries
         offers_count, upsells_count, redshift_time = fetch_redshift_metrics(
             date_info['buffer_start'], date_info['buffer_end'],
-            date_info['start_date'], date_info['end_date']
+            date_info['start_date'], date_info['end_date'],
+            quarterly_table
         )
 
         # Fetch from MySQL (player heartbeats) — rolling window since table stores current state only
