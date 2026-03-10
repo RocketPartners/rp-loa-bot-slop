@@ -44,7 +44,7 @@ Runs Monday-Friday at 8:30 AM EST via LaunchCode cron: `30 8 * * 1-5`
 ## Data Sources
 
 - **Azure Application Insights**: Exception tracking, request metrics, dependencies
-- **Redshift**: Offers and upsells from warehouse.public.firehose_offer9 and offer_2026_q1
+- **Redshift**: Offers and upsells from warehouse.public.firehose_offer9 and quarterly table (auto-resolved, e.g. offer_2026_q1)
 - **MySQL**: Player heartbeats from cirk-prod.cluster (us-east-1)
 
 ## Documentation
